@@ -1,0 +1,54 @@
+# Binaries
+xyllo
+xyllo.exe
+simulator
+simulator.exe
+/bin/
+/dist/
+
+# Build output
+*.o
+*.a
+*.so
+
+# Test cache & coverage
+*.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency vendor directory (if not vendoring)
+/vendor/
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+
+# Config overrides with secrets
+config/local.yaml
+config/*.local.yaml
+
+# DLQ log (runtime artefact)
+dlq.log
+
+# Editor & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Docker
+*.tar
+
+# pprof profiles
+*.prof
+*.pprof

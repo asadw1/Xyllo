@@ -1,0 +1,30 @@
+dispatcher:
+  workers: 8
+  buffer_size: 4096
+
+batcher:
+  max_size: 500
+  flush_interval: 2s
+
+dlq:
+  backend: file
+  target: dlq.log
+
+observability:
+  metrics_path: /metrics
+
+tls:
+  enabled: false
+  cert_file: ""
+  key_file: ""
+
+auth:
+  mode: none          # options: none | apikey | jwt
+  api_key: ""
+  jwt_secret: ""
+  jwt_issuer: ""
+
+rate_limit:
+  enabled: true
+  requests_per_second: 1000
+  burst_size: 2000

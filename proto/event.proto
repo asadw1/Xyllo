@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package xyllo.v1;
+
+option go_package = "github.com/yourusername/xyllo/proto/xyllov1";
+
+// EventRequest is the message sent by a client to ingest a telemetry event.
+message EventRequest {
+  // source identifies the originating service or device.
+  string source = 1;
+  // event_type classifies the payload (e.g. "click", "pageview", "metric").
+  string event_type = 2;
+  // timestamp_unix_ms is the event creation time in Unix milliseconds (UTC).
+  int64 timestamp_unix_ms = 3;
+  // payload holds the raw JSON body of the event.
+  bytes payload = 4;
+}
+
+// EventResponse is the acknowledgement returned to the client.
+message EventResponse {
+  // accepted is true when the event passed validation and was queued.
+  bool accepted = 1;
+  // error_message is populated only when accepted is false.
+  string error_message = 2;
+}
+
+// IngestorService exposes the gRPC ingestion endpoint.
+service IngestorService {
+  // Ingest receives a single event and returns an acknowledgement.
+  rpc Ingest(EventRequest) returns (EventResponse);
+  // IngestStream accepts a bidirectional stream for high-throughput clients.
+  rpc IngestStream(stream EventRequest) returns (stream EventResponse);
+}
