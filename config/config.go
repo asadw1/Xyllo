@@ -2,7 +2,13 @@
 // from a YAML file and/or environment variable overrides.
 package config
 
-import "time"
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
 
 // Config is the top-level configuration structure.
 type Config struct {
@@ -77,11 +83,73 @@ type RateLimitConfig struct {
 	BurstSize int `yaml:"burst_size"`
 }
 
-// Load reads the YAML file at path and returns a validated Config.
+// UnmarshalYAML implements yaml.Unmarshaler so that FlushInterval can be
+// expressed as a human-readable duration string (e.g. "2s", "500ms") in the
+// YAML file while remaining a time.Duration in Go.
+func (b *BatcherConfig) UnmarshalYAML(value *yaml.Node) error {
+	type plain struct {
+		MaxSize       int    `yaml:"max_size"`
+		FlushInterval string `yaml:"flush_interval"`
+	}
+	var p plain
+	if err := value.Decode(&p); err != nil {
+		return err
+	}
+	b.MaxSize = p.MaxSize
+	if p.FlushInterval != "" {
+		d, err := time.ParseDuration(p.FlushInterval)
+		if err != nil {
+			return fmt.Errorf("batcher.flush_interval: invalid duration %q: %w", p.FlushInterval, err)
+		}
+		b.FlushInterval = d
+	}
+	return nil
+}
+
+// Load reads the YAML file at path, applies environment variable overrides for
+// sensitive fields, and validates the resulting Config.
 //
-// TODO: Implement YAML unmarshal + env-override + struct validation.
+// Environment overrides (take precedence over the YAML file):
+//   - XYLLO_API_KEY    → Auth.APIKey
+//   - XYLLO_JWT_SECRET → Auth.JWTSecret
+//   - XYLLO_DLQ_TARGET → DLQ.Target
+//
+// If path is empty, Load returns the built-in defaults without reading any file.
 func Load(path string) (*Config, error) {
-	// Placeholder — return sensible defaults until file loading is implemented.
+	cfg := defaults()
+
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("config: read %q: %w", path, err)
+		}
+		if err := yaml.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("config: parse %q: %w", path, err)
+		}
+	}
+
+	// Environment overrides — secrets must never live in YAML files checked
+	// into source control. Env vars always win over file values.
+	if v := os.Getenv("XYLLO_API_KEY"); v != "" {
+		cfg.Auth.APIKey = v
+	}
+	if v := os.Getenv("XYLLO_JWT_SECRET"); v != "" {
+		cfg.Auth.JWTSecret = v
+	}
+	if v := os.Getenv("XYLLO_DLQ_TARGET"); v != "" {
+		cfg.DLQ.Target = v
+	}
+
+	if err := validate(cfg); err != nil {
+		return nil, fmt.Errorf("config: validation failed: %w", err)
+	}
+	return cfg, nil
+}
+
+// defaults returns a Config populated with safe, runnable built-in values.
+// These are used when no YAML file is provided and as the baseline before
+// file values are merged in.
+func defaults() *Config {
 	return &Config{
 		Dispatcher:    DispatcherConfig{Workers: 8, BufferSize: 4096},
 		Batcher:       BatcherConfig{MaxSize: 500, FlushInterval: 2 * time.Second},
@@ -90,5 +158,50 @@ func Load(path string) (*Config, error) {
 		TLS:           TLSConfig{Enabled: false},
 		Auth:          AuthConfig{Mode: "none"},
 		RateLimit:     RateLimitConfig{Enabled: true, RequestsPerSecond: 1000, BurstSize: 2000},
-	}, nil
+	}
+}
+
+// validate checks that cfg contains only coherent, safe values.
+func validate(cfg *Config) error {
+	if cfg.Dispatcher.Workers < 1 {
+		return fmt.Errorf("dispatcher.workers must be >= 1, got %d", cfg.Dispatcher.Workers)
+	}
+	if cfg.Dispatcher.BufferSize < 1 {
+		return fmt.Errorf("dispatcher.buffer_size must be >= 1, got %d", cfg.Dispatcher.BufferSize)
+	}
+	if cfg.Batcher.MaxSize < 1 {
+		return fmt.Errorf("batcher.max_size must be >= 1, got %d", cfg.Batcher.MaxSize)
+	}
+	if cfg.Batcher.FlushInterval <= 0 {
+		return fmt.Errorf("batcher.flush_interval must be > 0, got %v", cfg.Batcher.FlushInterval)
+	}
+
+	switch cfg.Auth.Mode {
+	case "none", "apikey", "jwt":
+		// valid
+	default:
+		return fmt.Errorf("auth.mode must be one of [none apikey jwt], got %q", cfg.Auth.Mode)
+	}
+	if cfg.Auth.Mode == "apikey" && cfg.Auth.APIKey == "" {
+		return fmt.Errorf("auth.api_key must be set when auth.mode is %q", cfg.Auth.Mode)
+	}
+	if cfg.Auth.Mode == "jwt" && cfg.Auth.JWTSecret == "" {
+		return fmt.Errorf("auth.jwt_secret must be set when auth.mode is %q", cfg.Auth.Mode)
+	}
+
+	validDLQBackends := map[string]bool{"": true, "file": true, "redis": true, "kafka": true, "log": true}
+	if !validDLQBackends[cfg.DLQ.Backend] {
+		return fmt.Errorf("dlq.backend must be one of [file redis kafka log], got %q", cfg.DLQ.Backend)
+	}
+
+	if cfg.RateLimit.Enabled {
+		if cfg.RateLimit.RequestsPerSecond < 1 {
+			return fmt.Errorf("rate_limit.requests_per_second must be >= 1 when rate limiting is enabled, got %d", cfg.RateLimit.RequestsPerSecond)
+		}
+		if cfg.RateLimit.BurstSize < 1 {
+			return fmt.Errorf("rate_limit.burst_size must be >= 1 when rate limiting is enabled, got %d", cfg.RateLimit.BurstSize)
+		}
+	}
+
+	return nil
 }

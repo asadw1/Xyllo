@@ -85,9 +85,12 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 **Timeline:** Weeks 4-5 | **Focus:** The "Sieve" logic and error handling
 
 **Milestones:**
-- [ ] Develop the standardized middleware interface.
-- [ ] Implement JSON schema validation and type checking.
-- [ ] Build the Dead Letter Queue (DLQ) for rejected payloads.
+- [x] Develop the standardized middleware interface (`SchemaValidator`, `TypeChecker`, pluggable `Chain`).
+- [x] Implement JSON schema validation and type checking (middleware package, 29 tests).
+- [x] Build the Dead Letter Queue (DLQ) for rejected payloads (file backend, concurrent-safe, 12 tests).
+- [x] Add typed error handling (`internal/xlerr` — `PipelineError` with stage/code/source).
+- [x] Add panic recovery in dispatcher workers (stack trace logged, worker continues, metric emitted).
+- [x] YAML config loading with env-variable overrides and validation (`config.Load`, 23 tests).
 
 **Deliverable:** An engine that drops malformed data and passes clean data to the sink.
 
