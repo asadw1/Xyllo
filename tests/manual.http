@@ -1,0 +1,209 @@
+# Xyllo Manual Test Suite
+# Requires the REST Client extension (humao.rest-client).
+# Click "Send Request" above any request block to run it.
+#
+# START THE SERVER FIRST:
+#   go run ./cmd/xyllo -port 8080 -config config/config.yaml
+#
+# Metrics run on a separate port (:9091) — see Section 5.
+
+@baseUrl = http://localhost:8080
+
+###############################################################################
+# SECTION 1 — Health probes (no auth required regardless of mode)
+###############################################################################
+
+# Liveness probe — always 200 while the process is alive
+GET {{baseUrl}}/healthz
+
+###
+
+# Readiness probe — 200 when the server is ready for traffic
+GET {{baseUrl}}/readyz
+
+###############################################################################
+# SECTION 2 — Ingest (default config: auth.mode = none)
+###############################################################################
+
+# Happy path — all required fields present → 202 Accepted
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+X-Source-ID: test-client
+
+{
+  "id": "evt-001",
+  "source": "test-client",
+  "event_type": "page_view",
+  "timestamp_ms": 1716000000000,
+  "body": { "page": "/home" }
+}
+
+###
+
+# Empty body → 400 Bad Request
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+
+###
+
+# Missing required field (timestamp_ms) → 202 Accepted (queued),
+# then rejected by SchemaValidator in the worker and written to dlq.log
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+X-Source-ID: test-client
+
+{
+  "id": "evt-002",
+  "source": "test-client",
+  "event_type": "click"
+}
+
+###
+
+# Wrong field types (timestamp_ms is a string not a number) → 202 Accepted (queued),
+# then rejected by TypeChecker and written to dlq.log
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+X-Source-ID: test-client
+
+{
+  "id": "evt-003",
+  "source": "test-client",
+  "event_type": "click",
+  "timestamp_ms": "not-a-number"
+}
+
+###############################################################################
+# SECTION 3 — API Key auth
+#
+# Before running this section:
+#   1. Edit config/config.yaml:
+#        auth:
+#          mode: apikey
+#          api_key: manual-test-key
+#   2. Restart the server
+###############################################################################
+
+# Valid API key → 202 Accepted
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+X-Source-ID: test-client
+X-API-Key: manual-test-key
+
+{
+  "id": "evt-004",
+  "source": "test-client",
+  "event_type": "login",
+  "timestamp_ms": 1716000000000
+}
+
+###
+
+# Wrong API key → 401 Unauthorized
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+X-API-Key: wrong-key
+
+{
+  "id": "evt-005",
+  "source": "test-client",
+  "event_type": "login",
+  "timestamp_ms": 1716000000000
+}
+
+###
+
+# Missing X-API-Key header → 401 Unauthorized
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+
+{
+  "id": "evt-006",
+  "source": "test-client",
+  "event_type": "login",
+  "timestamp_ms": 1716000000000
+}
+
+###############################################################################
+# SECTION 4 — JWT auth
+#
+# Before running this section:
+#   1. Edit config/config.yaml:
+#        auth:
+#          mode: jwt
+#          jwt_secret: manual-test-secret
+#          jwt_issuer: xyllo
+#   2. Restart the server
+#
+# TOKEN GENERATION (run in terminal when token expires):
+#   go run ./scripts/gen_jwt.go
+#   (or use jwt.io with algorithm HS256, secret "manual-test-secret")
+#
+# Current token (signed with secret "manual-test-secret", iss "xyllo", exp +24h from generation):
+@validJWT = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzkyNDQ4ODAsImlhdCI6MTc3OTE1ODQ4MCwiaXNzIjoieHlsbG8iLCJzdWIiOiJ0ZXN0LWNsaWVudCJ9.uGi04etXcSrrgc0UT2g-8Dbs4UrGFlHNP8QRyPJkK2U
+###
+
+# Valid JWT → 202 Accepted
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+X-Source-ID: test-client
+Authorization: Bearer {{validJWT}}
+
+{
+  "id": "evt-007",
+  "source": "test-client",
+  "event_type": "purchase",
+  "timestamp_ms": 1716000000000,
+  "body": { "amount": 49.99 }
+}
+
+###
+
+# Tampered / invalid JWT → 401 Unauthorized
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhdHRhY2tlciJ9.invalidsignature
+
+{
+  "id": "evt-008",
+  "source": "test-client",
+  "event_type": "purchase",
+  "timestamp_ms": 1716000000000
+}
+
+###
+
+# Missing Authorization header → 401 Unauthorized
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+
+{
+  "id": "evt-009",
+  "source": "test-client",
+  "event_type": "purchase",
+  "timestamp_ms": 1716000000000
+}
+
+###
+
+# Token without "Bearer " prefix → 401 Unauthorized
+POST {{baseUrl}}/v1/ingest
+Content-Type: application/json
+Authorization: {{validJWT}}
+
+{
+  "id": "evt-010",
+  "source": "test-client",
+  "event_type": "purchase",
+  "timestamp_ms": 1716000000000
+}
+
+###############################################################################
+# SECTION 5 — Metrics (Prometheus scrape endpoint, separate port)
+#
+# Requires auth.mode: none (metrics port has no auth).
+# View raw counters: xyllo_events_received_total, xyllo_events_rejected_total,
+#                   xyllo_worker_panics_recovered_total
+###############################################################################
+
+GET http://localhost:9091/metrics
