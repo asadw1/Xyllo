@@ -48,6 +48,13 @@ var (
 		Name: "xyllo_rate_limited_requests_total",
 		Help: "Total number of requests dropped by the per-source rate limiter.",
 	}, []string{"source"})
+
+	// PanicsRecovered counts goroutine panics caught by the dispatcher's
+	// per-payload recover guard. A non-zero value warrants immediate investigation.
+	PanicsRecovered = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "xyllo_worker_panics_recovered_total",
+		Help: "Total number of panics recovered by the dispatcher worker pool.",
+	})
 )
 
 // Handler returns the Prometheus HTTP handler for the /metrics endpoint.

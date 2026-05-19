@@ -9,6 +9,9 @@
 package dispatcher
 
 import (
+	"fmt"
+	"log"
+	"runtime"
 	"sync"
 
 	"github.com/yourusername/xyllo/config"
@@ -16,6 +19,7 @@ import (
 	"github.com/yourusername/xyllo/internal/dlq"
 	"github.com/yourusername/xyllo/internal/metrics"
 	"github.com/yourusername/xyllo/internal/middleware"
+	"github.com/yourusername/xyllo/internal/xlerr"
 )
 
 // Payload is the unit of work that travels through the pipeline from the
@@ -94,29 +98,50 @@ func (d *Dispatcher) Submit(p Payload) bool {
 // before the goroutine terminates.
 func (d *Dispatcher) process() {
 	defer d.wg.Done()
-
 	for p := range d.buf {
-		// Decrement the depth gauge now that we have taken ownership of p.
-		metrics.WorkerPoolDepth.Dec()
-
-		r := &middleware.Result{
-			Source: p.Source,
-			Data:   p.Data,
-		}
-
-		if err := d.chain.Run(r); err != nil {
-			// Validation failed — route to the DLQ and record the rejection.
-			// The worker continues processing subsequent payloads; a single
-			// bad payload must never stall the pool (architecture.md §3.4).
-			metrics.EventsRejected.WithLabelValues(p.Source, "validation_error").Inc()
-			metrics.DLQEnqueued.Inc()
-			d.dlq.Push(p.Source, err.Error(), p.Data)
-			continue
-		}
-
-		// Payload passed validation — hand it to the batcher for upstream delivery.
-		d.batcher.Add(p.Data)
+		d.processOne(p)
 	}
+}
+
+// processOne handles a single payload inside a deferred recover guard.
+// A panic in any middleware handler is caught here, logged with a stack trace,
+// routed to the DLQ, and counted in metrics — the worker goroutine then
+// continues processing subsequent payloads uninterrupted.
+func (d *Dispatcher) processOne(p Payload) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			stack := make([]byte, 4096)
+			n := runtime.Stack(stack, false)
+			pe := xlerr.New(xlerr.StageDispatch, xlerr.CodePanic, p.Source,
+				fmt.Errorf("%v", rec))
+			log.Printf("[dispatcher] worker panic recovered: %v\n%s", pe, stack[:n])
+			metrics.PanicsRecovered.Inc()
+			metrics.DLQEnqueued.Inc()
+			d.dlq.Push(p.Source, pe.Error(), p.Data)
+		}
+	}()
+
+	// Decrement the depth gauge now that we have taken ownership of p.
+	metrics.WorkerPoolDepth.Dec()
+
+	r := &middleware.Result{
+		Source: p.Source,
+		Data:   p.Data,
+	}
+
+	if err := d.chain.Run(r); err != nil {
+		// Validation failed — wrap with structured context, route to DLQ.
+		// The worker continues processing subsequent payloads; a single
+		// bad payload must never stall the pool (architecture.md §3.4).
+		pe := xlerr.New(xlerr.StageValidation, xlerr.CodeValidation, p.Source, err)
+		metrics.EventsRejected.WithLabelValues(p.Source, string(xlerr.CodeValidation)).Inc()
+		metrics.DLQEnqueued.Inc()
+		d.dlq.Push(p.Source, pe.Error(), p.Data)
+		return
+	}
+
+	// Payload passed validation — hand it to the batcher for upstream delivery.
+	d.batcher.Add(p.Data)
 }
 
 // Shutdown closes the inbound channel and blocks until every worker goroutine

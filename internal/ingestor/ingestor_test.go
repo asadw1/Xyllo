@@ -34,7 +34,10 @@ func newTestServer(t *testing.T, bufSize int) *Server {
 		MaxSize:       10,
 		FlushInterval: time.Second,
 	})
-	dlqSink := dlq.New(config.DLQConfig{Backend: "file", Target: ""})
+	dlqSink, err := dlq.New(config.DLQConfig{Backend: "file", Target: ""})
+	if err != nil {
+		t.Fatalf("dlq.New: %v", err)
+	}
 	disp := dispatcher.New(
 		config.DispatcherConfig{Workers: 0, BufferSize: bufSize},
 		chain, bat, dlqSink,
