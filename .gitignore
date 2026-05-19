@@ -54,3 +54,4 @@ Thumbs.db
 *.pprof
 coverage
 coverage-report.html
+error.log

@@ -45,6 +45,7 @@ func newTestServer(t *testing.T, bufSize int) *Server {
 	reg := translator.NewRegistry()
 	cfg := &config.Config{
 		Observability: config.ObservabilityConfig{MetricsPath: "/metrics"},
+		Auth:          config.AuthConfig{Mode: "none"},
 	}
 	return New("0", cfg, disp, reg)
 }

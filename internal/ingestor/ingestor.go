@@ -18,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/yourusername/xyllo/config"
+	"github.com/yourusername/xyllo/internal/auth"
 	"github.com/yourusername/xyllo/internal/dispatcher"
 	"github.com/yourusername/xyllo/internal/metrics"
 	"github.com/yourusername/xyllo/internal/pool"
@@ -86,7 +87,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// Run the Fiber listener in a goroutine so we can race it against ctx.
 	listenErr := make(chan error, 1)
 	go func() {
-		listenErr <- app.Listen(":" + s.port)
+		if s.cfg.TLS.Enabled {
+			listenErr <- app.ListenTLS(":"+s.port, s.cfg.TLS.CertFile, s.cfg.TLS.KeyFile)
+		} else {
+			listenErr <- app.Listen(":" + s.port)
+		}
 	}()
 
 	select {
@@ -124,7 +129,9 @@ func (s *Server) buildApp() *fiber.App {
 
 	app.Get("/healthz", s.handleHealthz)
 	app.Get("/readyz", s.handleReadyz)
-	app.Post("/v1/ingest", s.handleIngest)
+	// Auth middleware is applied per-route so that healthz/readyz remain
+	// publicly accessible for load-balancer and Kubernetes probes.
+	app.Post("/v1/ingest", auth.Middleware(s.cfg.Auth), s.handleIngest)
 
 	return app
 }

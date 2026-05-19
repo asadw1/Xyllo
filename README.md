@@ -101,9 +101,9 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 **Timeline:** Weeks 6-7 | **Focus:** Access control and transit security
 
 **Milestones:**
-- [ ] Implement API Key / JWT authentication middleware.
-- [ ] Add TLS support for secure telemetry transit.
-- [ ] Integrate rate limiting (Token Bucket) per source.
+- [x] Implement API Key / JWT authentication middleware (`ValidateAPIKey` with constant-time compare, `ValidateJWT` with HS256; 21 tests).
+- [x] Add TLS support — `ListenTLS` branch in `ingestor.Start()` when `cfg.TLS.Enabled`.
+- [x] Integrate rate limiting — `RateLimiter.Middleware()` prepended to the dispatcher chain when `cfg.RateLimit.Enabled`.
 
 **Deliverable:** A secure gateway that restricts ingestion to authorized clients.
 
