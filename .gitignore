@@ -52,3 +52,4 @@ Thumbs.db
 # pprof profiles
 *.prof
 *.pprof
+coverage
