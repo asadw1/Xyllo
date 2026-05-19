@@ -4,7 +4,7 @@ BUILD_DIR  := bin
 PROTO_DIR  := proto
 PROTO_OUT  := proto/xyllov1
 
-.PHONY: all build run test lint proto docker clean
+.PHONY: all build run test cover lint proto docker clean
 
 all: build
 
@@ -20,6 +20,17 @@ run: build
 ## test: run unit tests
 test:
 	go test ./... -race -cover
+
+## cover: run tests, print per-package summary table, and open HTML report
+## cmd/ is excluded — main() is a composition root with no testable logic.
+cover:
+	go test -coverprofile coverage.out $(shell go list ./internal/...)
+	@echo ""
+	@echo "=== Coverage by function ==="
+	go tool cover -func coverage.out
+	@echo ""
+	@echo "=== Opening HTML report in browser ==="
+	go tool cover -html coverage.out
 
 ## test-integration: run integration tests (requires -tags integration)
 test-integration:

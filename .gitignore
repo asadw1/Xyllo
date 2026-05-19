@@ -53,3 +53,4 @@ Thumbs.db
 *.prof
 *.pprof
 coverage
+coverage-report.html

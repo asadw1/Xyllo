@@ -72,8 +72,8 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 
 **Milestones:**
 - [x] Initialize Go module, package structure, and confirm clean build.
-- [ ] Wire up HTTP (Fiber) and gRPC listeners in the ingestor.
-- [ ] Launch worker goroutines in the dispatcher and connect to the buffered channel.
+- [x] Wire up HTTP (Fiber) and gRPC listeners in the ingestor.
+- [x] Launch worker goroutines in the dispatcher and connect to the buffered channel.
 - [x] Design `sync.Pool` memory management for payload reuse (`internal/pool`).
 
 **Deliverable:** A functional engine that can receive, log, and acknowledge events.
@@ -117,8 +117,9 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 - [ ] Extend `config.RedisConfig` and `config/config.yaml` with addr, stream prefix, consumer group, and region list.
 - [ ] Wire `StreamIngestor` into the startup sequence alongside the HTTP/gRPC ingestor.
 - [ ] Add a `docker-compose.yml` with Redis, Xyllo server, and simulator services.
+- [ ] Add Prometheus and Grafana to `docker-compose.yml` — Prometheus scrapes Xyllo's `:9091/metrics` endpoint; Grafana is pre-provisioned with a dashboard visualising ingestion rate, worker pool depth, DLQ depth, and events rejected. The simulator drives the traffic that populates all panels.
 
-**Deliverable:** A self-contained demo where the simulator floods five regional streams and Xyllo ingests, translates, and dispatches all events end-to-end.
+**Deliverable:** A self-contained demo where the simulator floods five regional streams and Xyllo ingests, translates, and dispatches all events end-to-end, with live metrics visible in Grafana.
 
 ---
 
@@ -163,11 +164,25 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 
 ### Prerequisites
 
-| Requirement | Version  |
-|-------------|----------|
-| Go          | 1.22+    |
-| protoc      | 3.x+     |
-| make        | any      |
+| Requirement | Version | Install |
+|---|---|---|
+| Go | 1.22+ | https://go.dev/dl |
+| make | any | `winget install GnuWin32.Make` (Windows) / pre-installed on macOS & Linux |
+| protoc | 3.x+ | https://grpc.io/docs/protoc-installation |
+| gocov | latest | `go install github.com/axw/gocov/gocov@v1.1.0` |
+| gocov-html | latest | `go install github.com/matm/gocov-html/cmd/gocov-html@latest` |
+
+After installing `make` on Windows, add it to your PATH:
+```powershell
+$env:PATH += ";C:\Program Files (x86)\GnuWin32\bin"
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";C:\Program Files (x86)\GnuWin32\bin", "User")
+```
+
+After installing Go tools, ensure `$GOPATH/bin` is on your PATH:
+```powershell
+$env:PATH += ";$env:USERPROFILE\go\bin"
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$env:USERPROFILE\go\bin", "User")
+```
 
 ### Install & Run
 
@@ -187,14 +202,34 @@ go build -o Xyllo main.go
 
 ```bash
 # Run all unit tests
-go test ./...
+make test
 
-# Run with race detector
-go test -race ./...
-
-# Run load tests (requires k6)
-k6 run tests/load/ingestor.js
+# Run integration tests (requires Docker)
+make test-integration
 ```
+
+## Coverage Report
+
+Coverage is scoped to `internal/` — the composition root (`cmd/`) is excluded as it contains no testable logic.
+
+```bash
+# Generate coverage report: prints per-function table to terminal and opens
+# the annotated HTML report in your browser
+make cover
+```
+
+For a sortable single-page HTML table (requires `gocov` and `gocov-html`):
+
+```bash
+gocov test ./... | gocov-html > coverage-report.html
+open coverage-report.html      # macOS
+start coverage-report.html     # Windows
+```
+
+To view inline gutters in VS Code (green/red line coverage per file):
+1. Install the [Coverage Gutters](https://marketplace.visualstudio.com/items?itemName=ryanluker.vscode-coverage-gutters) extension.
+2. Run `make cover` to generate `coverage.out`.
+3. Open any `.go` file and click **Watch** in the VS Code status bar.
 
 ## Configuration
 
