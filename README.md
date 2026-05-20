@@ -108,6 +108,7 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 - [x] Fix metric correctness: `xyllo_rate_limited_requests_total` now incremented inside the rate-limiter middleware on every rejected request (was declared but never called); `WorkerPoolDepth` uses `Set(float64(len(buf)))` for point-in-time accuracy rather than Inc/Dec.
 - [x] Promote `metricsPort` from a hardcoded constant to `config.ObservabilityConfig.MetricsPort` (`metrics_port` in YAML, defaults to `9091`).
 - [x] Wire 24 integration tests end-to-end covering the full pipeline: auth variants (none / API key / JWT), middleware chain, DLQ routing, rate limiting, and backpressure.
+- [x] Achieve 100% unit-test coverage for `internal/batcher`, `internal/translator`, and `internal/metrics` (facade + PrometheusProvider) ahead of Phase 4.
 
 **Deliverable:** A secure gateway that restricts ingestion to authorized clients.
 

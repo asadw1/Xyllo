@@ -39,6 +39,10 @@ var active Provider = nopProvider{}
 // before starting any pipeline components.
 func SetProvider(p Provider) { active = p }
 
+// NewNopProvider returns a Provider that silently discards all observations.
+// Useful in tests that need to restore a neutral provider after calling SetProvider.
+func NewNopProvider() Provider { return nopProvider{} }
+
 // Package-level delegation functions — these are the only symbols pipeline
 // packages should call. No pipeline code should import Prometheus directly.
 
