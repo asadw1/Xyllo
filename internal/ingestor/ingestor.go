@@ -106,6 +106,13 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 }
 
+// BuildApp constructs the Fiber application for use in tests without binding a
+// port. It is the exported equivalent of buildApp, allowing integration tests
+// in external packages to exercise routes via app.Test.
+func (s *Server) BuildApp() *fiber.App {
+	return s.buildApp()
+}
+
 // buildApp constructs and returns the configured Fiber application with all
 // routes registered. It is intentionally decoupled from Start so that tests
 // can exercise routes directly via app.Test without binding a real port.
