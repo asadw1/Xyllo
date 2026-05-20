@@ -110,6 +110,8 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 - [x] Wire 24 integration tests end-to-end covering the full pipeline: auth variants (none / API key / JWT), middleware chain, DLQ routing, rate limiting, and backpressure.
 - [x] Achieve 100% unit-test coverage for `internal/batcher`, `internal/translator`, and `internal/metrics` (facade + PrometheusProvider) ahead of Phase 4.
 
+> **Note — `internal/ingestor` coverage ceiling (~60%):** `Start()` is intentionally excluded from unit tests. It binds two real TCP ports (ingest + Prometheus metrics), which triggers Windows Defender Firewall prompts and makes tests environment-dependent. All business logic — routing, auth, handler responses, backpressure — is fully covered via `app.Test()`. The ~23 uncovered statements are goroutine lifecycle and OS-signal handling in `Start()`, which are validated at the integration level in `tests/`.
+
 **Deliverable:** A secure gateway that restricts ingestion to authorized clients.
 
 ---
