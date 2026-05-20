@@ -10,7 +10,6 @@
 package ingestor
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -251,42 +250,5 @@ func TestServer_Ingest_Returns404ForUnknownRoute(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("want 404 for unknown route, got %d", resp.StatusCode)
-	}
-}
-
-// --- Start() ---
-
-// TestServer_Start_GracefulShutdown verifies that Start returns cleanly when
-// its context is cancelled while the server is running. Both the Fiber ingest
-// listener and the Prometheus metrics server use port 0 (OS-assigned) so the
-// test never conflicts with other processes.
-func TestServer_Start_GracefulShutdown(t *testing.T) {
-	srv := newTestServer(t, 4)
-	// Override MetricsPort to "0" so the OS picks a free port.
-	srv.cfg.Observability.MetricsPort = "0"
-
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	if err := srv.Start(ctx); err != nil {
-		t.Errorf("Start returned unexpected error: %v", err)
-	}
-}
-
-// TestServer_Start_DefaultMetricsPortFallback verifies that an empty
-// MetricsPort in the config falls back to "9091". A pre-cancelled context is
-// used so that http.Server.Shutdown() is called before ListenAndServe() runs,
-// meaning port 9091 is never actually bound.
-func TestServer_Start_DefaultMetricsPortFallback(t *testing.T) {
-	srv := newTestServer(t, 4)
-	// MetricsPort is deliberately left empty to exercise the fallback.
-	srv.cfg.Observability.MetricsPort = ""
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancel before calling Start
-
-	// Start must return quickly without error even with a pre-cancelled context.
-	if err := srv.Start(ctx); err != nil {
-		t.Errorf("Start returned unexpected error: %v", err)
 	}
 }

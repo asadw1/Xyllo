@@ -19,6 +19,7 @@ type Config struct {
 	TLS           TLSConfig           `yaml:"tls"`
 	Auth          AuthConfig          `yaml:"auth"`
 	RateLimit     RateLimitConfig     `yaml:"rate_limit"`
+	Redis         RedisConfig         `yaml:"redis"`
 }
 
 // DispatcherConfig controls the worker pool and buffer.
@@ -87,6 +88,33 @@ type RateLimitConfig struct {
 	BurstSize int `yaml:"burst_size"`
 }
 
+// RedisConfig holds connection and stream-consumption settings for the Redis
+// Streams backend used by the StreamIngestor and the geo simulator.
+type RedisConfig struct {
+	// Enabled toggles the Redis Streams consumer. When false the StreamIngestor
+	// is not started and no Redis connection is established.
+	Enabled bool `yaml:"enabled"`
+	// Addr is the Redis server address (host:port).
+	Addr string `yaml:"addr"`
+	// Password is the Redis AUTH password (empty for no auth).
+	Password string `yaml:"password"`
+	// DB is the Redis logical database number.
+	DB int `yaml:"db"`
+	// StreamPrefix is prepended to each region name to form the stream key.
+	// Stream key pattern: <StreamPrefix>:<region>
+	StreamPrefix string `yaml:"stream_prefix"`
+	// ConsumerGroup is the Redis Streams consumer group name.
+	ConsumerGroup string `yaml:"consumer_group"`
+	// ConsumerName is the unique identifier for this Xyllo instance within the group.
+	ConsumerName string `yaml:"consumer_name"`
+	// Regions lists the region identifiers to consume. One goroutine per region.
+	Regions []string `yaml:"regions"`
+	// ReadBatchSize is the maximum number of messages fetched per XREADGROUP call.
+	ReadBatchSize int64 `yaml:"read_batch_size"`
+	// ReadBlockMs is the BLOCK duration in milliseconds for XREADGROUP.
+	ReadBlockMs int64 `yaml:"read_block_ms"`
+}
+
 // UnmarshalYAML implements yaml.Unmarshaler so that FlushInterval can be
 // expressed as a human-readable duration string (e.g. "2s", "500ms") in the
 // YAML file while remaining a time.Duration in Go.
@@ -143,6 +171,9 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("XYLLO_DLQ_TARGET"); v != "" {
 		cfg.DLQ.Target = v
 	}
+	if v := os.Getenv("XYLLO_REDIS_PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
 
 	if err := validate(cfg); err != nil {
 		return nil, fmt.Errorf("config: validation failed: %w", err)
@@ -162,6 +193,16 @@ func defaults() *Config {
 		TLS:           TLSConfig{Enabled: false},
 		Auth:          AuthConfig{Mode: "none"},
 		RateLimit:     RateLimitConfig{Enabled: true, RequestsPerSecond: 1000, BurstSize: 2000},
+		Redis: RedisConfig{
+			Enabled:       false,
+			Addr:          "localhost:6379",
+			StreamPrefix:  "xyllo:stream",
+			ConsumerGroup: "xyllo-consumers",
+			ConsumerName:  "xyllo-1",
+			Regions:       []string{"us-east-1", "eu-west-1", "ap-southeast-1", "sa-east-1", "af-south-1"},
+			ReadBatchSize: 100,
+			ReadBlockMs:   1000,
+		},
 	}
 }
 
@@ -204,6 +245,15 @@ func validate(cfg *Config) error {
 		}
 		if cfg.RateLimit.BurstSize < 1 {
 			return fmt.Errorf("rate_limit.burst_size must be >= 1 when rate limiting is enabled, got %d", cfg.RateLimit.BurstSize)
+		}
+	}
+
+	if cfg.Redis.Enabled {
+		if cfg.Redis.Addr == "" {
+			return fmt.Errorf("redis.addr must be set when redis is enabled")
+		}
+		if cfg.Redis.ReadBatchSize < 1 {
+			return fmt.Errorf("redis.read_batch_size must be >= 1, got %d", cfg.Redis.ReadBatchSize)
 		}
 	}
 

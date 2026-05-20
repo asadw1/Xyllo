@@ -121,13 +121,13 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 **Timeline:** Weeks 8-9 | **Focus:** Multi-region event sourcing and realistic load generation
 
 **Milestones:**
-- [ ] Add `internal/redisstore` — thin `go-redis/v9` client wrapper (XADD, XREADGROUP, XACK, consumer group management).
-- [ ] Add `internal/streamingestor` — Redis Streams consumer that reads from per-region streams, translates via the ACL registry, and feeds the dispatcher.
-- [ ] Add `cmd/simulator` — geo event generator that publishes synthetic telemetry to `xyllo:stream:<region>` for five configurable regions (`us-east-1`, `eu-west-1`, `ap-southeast-1`, `sa-east-1`, `af-south-1`).
-- [ ] Extend `config.RedisConfig` and `config/config.yaml` with addr, stream prefix, consumer group, and region list.
-- [ ] Wire `StreamIngestor` into the startup sequence alongside the HTTP/gRPC ingestor.
-- [ ] Add a `docker-compose.yml` with Redis, Xyllo server, and simulator services.
-- [ ] Add Prometheus and Grafana to `docker-compose.yml` — Prometheus scrapes Xyllo's `:9091/metrics` endpoint; Grafana is pre-provisioned with a dashboard visualising ingestion rate, worker pool depth, DLQ depth, and events rejected. The simulator drives the traffic that populates all panels.
+- [x] Add `internal/redisstore` — thin `go-redis/v9` client wrapper (XADD, XREADGROUP, XACK, consumer group management).
+- [x] Add `internal/streamingestor` — Redis Streams consumer that reads from per-region streams, translates via the ACL registry, and feeds the dispatcher.
+- [x] Add `cmd/simulator` — geo event generator that publishes synthetic telemetry to `xyllo:stream:<region>` for five configurable regions (`us-east-1`, `eu-west-1`, `ap-southeast-1`, `sa-east-1`, `af-south-1`).
+- [x] Extend `config.RedisConfig` and `config/config.yaml` with addr, stream prefix, consumer group, and region list.
+- [x] Wire `StreamIngestor` into the startup sequence alongside the HTTP/gRPC ingestor.
+- [x] Add a `docker-compose.yml` with Redis, Xyllo server, and simulator services.
+- [x] Add Prometheus and Grafana to `docker-compose.yml` — Prometheus scrapes Xyllo's `:9091/metrics` endpoint; Grafana is pre-provisioned with a dashboard visualising ingestion rate, worker pool depth, DLQ depth, and events rejected. The simulator drives the traffic that populates all panels.
 
 **Deliverable:** A self-contained demo where the simulator floods five regional streams and Xyllo ingests, translates, and dispatches all events end-to-end, with live metrics visible in Grafana.
 

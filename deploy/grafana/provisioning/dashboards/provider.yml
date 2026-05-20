@@ -1,0 +1,10 @@
+apiVersion: 1
+
+providers:
+  - name: xyllo
+    folder: Xyllo
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /etc/grafana/provisioning/dashboards
