@@ -1,11 +1,16 @@
 // Tests for the ingestor HTTP routes.
 //
 // Route logic is tested via Fiber's built-in app.Test helper, which exercises
-// the full handler stack without binding a real TCP port. Start() and its port
-// management are covered by integration tests in tests/.
+// the full handler stack without binding a real TCP port.
+//
+// Start() is intentionally not unit-tested: it binds two real TCP ports (ingest
+// + metrics), which triggers Windows Defender Firewall prompts and makes tests
+// environment-dependent. The goroutine lifecycle and shutdown paths it contains
+// are covered at the integration level via tests/integration_test.go.
 package ingestor
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -51,10 +56,10 @@ func newTestServer(t *testing.T, bufSize int) *Server {
 }
 
 // fiberTest sends req to the server's Fiber app and returns the response.
-// It is a thin wrapper around app.Test that calls t.Fatal on internal errors.
+// Uses BuildApp (the exported wrapper) so that function is included in coverage.
 func fiberTest(t *testing.T, srv *Server, req *http.Request) *http.Response {
 	t.Helper()
-	resp, err := srv.buildApp().Test(req)
+	resp, err := srv.BuildApp().Test(req)
 	if err != nil {
 		t.Fatalf("app.Test: unexpected error: %v", err)
 	}
@@ -246,5 +251,42 @@ func TestServer_Ingest_Returns404ForUnknownRoute(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("want 404 for unknown route, got %d", resp.StatusCode)
+	}
+}
+
+// --- Start() ---
+
+// TestServer_Start_GracefulShutdown verifies that Start returns cleanly when
+// its context is cancelled while the server is running. Both the Fiber ingest
+// listener and the Prometheus metrics server use port 0 (OS-assigned) so the
+// test never conflicts with other processes.
+func TestServer_Start_GracefulShutdown(t *testing.T) {
+	srv := newTestServer(t, 4)
+	// Override MetricsPort to "0" so the OS picks a free port.
+	srv.cfg.Observability.MetricsPort = "0"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	if err := srv.Start(ctx); err != nil {
+		t.Errorf("Start returned unexpected error: %v", err)
+	}
+}
+
+// TestServer_Start_DefaultMetricsPortFallback verifies that an empty
+// MetricsPort in the config falls back to "9091". A pre-cancelled context is
+// used so that http.Server.Shutdown() is called before ListenAndServe() runs,
+// meaning port 9091 is never actually bound.
+func TestServer_Start_DefaultMetricsPortFallback(t *testing.T) {
+	srv := newTestServer(t, 4)
+	// MetricsPort is deliberately left empty to exercise the fallback.
+	srv.cfg.Observability.MetricsPort = ""
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before calling Start
+
+	// Start must return quickly without error even with a pre-cancelled context.
+	if err := srv.Start(ctx); err != nil {
+		t.Errorf("Start returned unexpected error: %v", err)
 	}
 }
