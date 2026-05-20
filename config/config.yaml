@@ -12,6 +12,7 @@ dlq:
 
 observability:
   metrics_path: /metrics
+  metrics_port: "9091"
 
 tls:
   enabled: false

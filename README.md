@@ -104,6 +104,10 @@ The development of Xyllo is divided into five distinct phases, moving from a fun
 - [x] Implement API Key / JWT authentication middleware (`ValidateAPIKey` with constant-time compare, `ValidateJWT` with HS256; 21 tests).
 - [x] Add TLS support — `ListenTLS` branch in `ingestor.Start()` when `cfg.TLS.Enabled`.
 - [x] Integrate rate limiting — `RateLimiter.Middleware()` prepended to the dispatcher chain when `cfg.RateLimit.Enabled`.
+- [x] Introduce `metrics.Provider` facade — all pipeline packages record observations through the interface; Prometheus is the current backend (`PrometheusProvider`, private registry per instance); swap to any alternative with a single `metrics.SetProvider(...)` call in `main.go`. No pipeline code references Prometheus types directly.
+- [x] Fix metric correctness: `xyllo_rate_limited_requests_total` now incremented inside the rate-limiter middleware on every rejected request (was declared but never called); `WorkerPoolDepth` uses `Set(float64(len(buf)))` for point-in-time accuracy rather than Inc/Dec.
+- [x] Promote `metricsPort` from a hardcoded constant to `config.ObservabilityConfig.MetricsPort` (`metrics_port` in YAML, defaults to `9091`).
+- [x] Wire 24 integration tests end-to-end covering the full pipeline: auth variants (none / API key / JWT), middleware chain, DLQ routing, rate limiting, and backpressure.
 
 **Deliverable:** A secure gateway that restricts ingestion to authorized clients.
 

@@ -25,14 +25,6 @@ import (
 	"github.com/yourusername/xyllo/internal/translator"
 )
 
-// metricsPort is the port on which the Prometheus /metrics endpoint is served.
-// Keeping metrics on a dedicated port allows firewall / network policy rules
-// to expose it only within the cluster while the ingest port remains public.
-//
-// TODO(observability): Promote to config.ObservabilityConfig.MetricsPort so
-// operators can override it at runtime.
-const metricsPort = "9091"
-
 // Server wraps the HTTP (Fiber) ingest listener and the Prometheus metrics
 // server. Create one with New and start it with Start.
 type Server struct {
@@ -71,6 +63,10 @@ func (s *Server) Start(ctx context.Context) error {
 	// policies can restrict scrape access independently of ingest traffic.
 	metricsMux := http.NewServeMux()
 	metricsMux.Handle(s.cfg.Observability.MetricsPath, metrics.Handler())
+	metricsPort := s.cfg.Observability.MetricsPort
+	if metricsPort == "" {
+		metricsPort = "9091"
+	}
 	metricsSrv := &http.Server{
 		Addr:         ":" + metricsPort,
 		Handler:      metricsMux,
@@ -190,7 +186,7 @@ func (s *Server) handleIngest(c *fiber.Ctx) error {
 	event, err := s.reg.Translate(source, p.Data)
 	if err != nil {
 		pool.Put(p) // No event was created; p.Data is no longer referenced.
-		metrics.EventsRejected.WithLabelValues(source, "translation_error").Inc()
+		metrics.RecordEventRejected(source, "translation_error")
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(errorResponse{Error: err.Error()})
 	}
 
@@ -213,11 +209,11 @@ func (s *Server) handleIngest(c *fiber.Ctx) error {
 	// Non-blocking submit — returns false immediately when the buffer is full.
 	// The caller is responsible for retry/back-off (architecture.md §3.3).
 	if !s.disp.Submit(dispatcher.Payload{Source: source, Data: data}) {
-		metrics.EventsRejected.WithLabelValues(source, "buffer_full").Inc()
+		metrics.RecordEventRejected(source, "buffer_full")
 		return c.Status(fiber.StatusTooManyRequests).JSON(errorResponse{Error: "buffer full, retry later"})
 	}
 
-	metrics.EventsIngested.WithLabelValues(source).Inc()
+	metrics.RecordEventIngested(source)
 	return c.Status(fiber.StatusAccepted).JSON(ingestResponse{
 		Status: "accepted",
 		ID:     event.ID,

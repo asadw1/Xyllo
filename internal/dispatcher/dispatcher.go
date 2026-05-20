@@ -85,7 +85,7 @@ func (d *Dispatcher) Submit(p Payload) bool {
 	// responsibility (architecture.md §3.3 Dispatcher & Worker Pool).
 	select {
 	case d.buf <- p:
-		metrics.WorkerPoolDepth.Inc()
+		metrics.ObserveWorkerPoolDepth(float64(len(d.buf)))
 		return true
 	default:
 		return false
@@ -115,14 +115,14 @@ func (d *Dispatcher) processOne(p Payload) {
 			pe := xlerr.New(xlerr.StageDispatch, xlerr.CodePanic, p.Source,
 				fmt.Errorf("%v", rec))
 			log.Printf("[dispatcher] worker panic recovered: %v\n%s", pe, stack[:n])
-			metrics.PanicsRecovered.Inc()
-			metrics.DLQEnqueued.Inc()
+			metrics.RecordPanicRecovered()
+			metrics.RecordDLQEnqueued()
 			d.dlq.Push(p.Source, pe.Error(), p.Data)
 		}
 	}()
 
-	// Decrement the depth gauge now that we have taken ownership of p.
-	metrics.WorkerPoolDepth.Dec()
+	// Update the pool depth gauge now that p has been removed from the buffer.
+	metrics.ObserveWorkerPoolDepth(float64(len(d.buf)))
 
 	r := &middleware.Result{
 		Source: p.Source,
@@ -134,8 +134,8 @@ func (d *Dispatcher) processOne(p Payload) {
 		// The worker continues processing subsequent payloads; a single
 		// bad payload must never stall the pool (architecture.md §3.4).
 		pe := xlerr.New(xlerr.StageValidation, xlerr.CodeValidation, p.Source, err)
-		metrics.EventsRejected.WithLabelValues(p.Source, string(xlerr.CodeValidation)).Inc()
-		metrics.DLQEnqueued.Inc()
+		metrics.RecordEventRejected(p.Source, string(xlerr.CodeValidation))
+		metrics.RecordDLQEnqueued()
 		d.dlq.Push(p.Source, pe.Error(), p.Data)
 		return
 	}

@@ -49,6 +49,10 @@ type DLQConfig struct {
 type ObservabilityConfig struct {
 	// MetricsPath is the HTTP path that exposes Prometheus metrics.
 	MetricsPath string `yaml:"metrics_path"`
+	// MetricsPort is the port on which the Prometheus /metrics endpoint is served.
+	// Keeping metrics on a dedicated port allows network policy rules to restrict
+	// scrape access independently of ingest traffic. Defaults to "9091".
+	MetricsPort string `yaml:"metrics_port"`
 }
 
 // TLSConfig controls TLS for the HTTP and gRPC listeners.

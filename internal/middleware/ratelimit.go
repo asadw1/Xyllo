@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yourusername/xyllo/config"
+	"github.com/yourusername/xyllo/internal/metrics"
 )
 
 // bucket is a single token-bucket for one source.
@@ -16,7 +17,7 @@ type bucket struct {
 	mu       sync.Mutex
 	tokens   float64
 	capacity float64
-	rate     float64    // tokens added per second
+	rate     float64 // tokens added per second
 	lastFill time.Time
 }
 
@@ -72,6 +73,7 @@ func (rl *RateLimiter) Middleware() Handler {
 	return func(r *Result) error {
 		b := rl.bucketFor(r.Source)
 		if !b.allow() {
+			metrics.RecordRateLimited(r.Source)
 			return fmt.Errorf("rate limit exceeded for source %q", r.Source)
 		}
 		return nil
